@@ -71,5 +71,8 @@ doc/userguide/*.1
 /windows-install/
 /src/suricata.exe
 
+# Generated public Redmine snapshots and download cache.
+/.scratch/upstream-redmine/
+
 # Don't ignore *.rules in rules/
 !/rules/*.rules

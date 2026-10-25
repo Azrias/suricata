@@ -1,5 +1,8 @@
 # Windows build
 
+For official support, bug reports, and Windows-related upstream discussions,
+see [Upstream community and issue tracking](UPSTREAM-RESOURCES.md).
+
 Built from https://github.com/OISF/suricata at commit
 `e16087fab` (version `9.0.0-dev`) using MSYS2 UCRT64, GCC 15.1.0,
 and Rust 1.87.0.

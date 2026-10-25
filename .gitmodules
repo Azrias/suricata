@@ -1,0 +1,3 @@
+[submodule "suricata-verify"]
+	path = suricata-verify
+	url = https://github.com/OISF/suricata-verify.git

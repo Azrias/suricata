@@ -1,0 +1,12 @@
+{
+    "lsp": {
+        "clangd": {
+            "binary": {
+                "arguments": [
+                    "--query-driver=C:/msys64/ucrt64/bin/*gcc.exe",
+                    "--background-index"
+                ]
+            }
+        }
+    }
+}

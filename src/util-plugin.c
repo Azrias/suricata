@@ -30,7 +30,48 @@
 #include "detect-engine-register.h"
 #include "output-eve.h"
 
+#ifdef OS_WIN32
+/* Research-only native loader. Configure does not enable Windows plugins. */
+static void *PluginOpen(const char *path)
+{
+    char absolute_path[PATH_MAX];
+    DWORD length = GetFullPathNameA(path, sizeof(absolute_path), absolute_path, NULL);
+    if (length == 0)
+        return NULL;
+    if (length >= sizeof(absolute_path)) {
+        SetLastError(ERROR_FILENAME_EXCED_RANGE);
+        return NULL;
+    }
+    /* Search dependencies beside the plugin and in the normal safe directories,
+     * not in the process's current working directory. */
+    return (void *)LoadLibraryExA(absolute_path, NULL,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+}
+
+static void *PluginSymbol(void *library, const char *symbol)
+{
+    return (void *)GetProcAddress((HMODULE)library, symbol);
+}
+
+static void PluginClose(void *library)
+{
+    FreeLibrary((HMODULE)library);
+}
+
+static const char *PluginError(void)
+{
+    /* Loading happens during initialization, before engine worker threads. */
+    static char error[64];
+    snprintf(error, sizeof(error), "Windows loader error %lu", (unsigned long)GetLastError());
+    return error;
+}
+#else
 #include <dlfcn.h>
+#define PluginOpen(path) dlopen((path), RTLD_NOW)
+#define PluginSymbol(library, symbol) dlsym((library), (symbol))
+#define PluginClose(library) dlclose((library))
+#define PluginError() dlerror()
+#endif
 
 typedef struct PluginListNode_ {
     SCPlugin *plugin;
@@ -78,22 +119,22 @@ bool RegisterPlugin(SCPlugin *plugin, void *lib)
 
 static void InitPlugin(const char *path)
 {
-    void *lib = dlopen(path, RTLD_NOW);
+    void *lib = PluginOpen(path);
     if (lib == NULL) {
-        SCLogNotice("Failed to open %s as a plugin: %s", path, dlerror());
+        SCLogNotice("Failed to open %s as a plugin: %s", path, PluginError());
     } else {
         SCLogNotice("Loading plugin %s", path);
 
-        SCPluginRegisterFunc plugin_register = dlsym(lib, "SCPluginRegister");
+        SCPluginRegisterFunc plugin_register = PluginSymbol(lib, "SCPluginRegister");
         if (plugin_register == NULL) {
             SCLogError("Plugin does not export SCPluginRegister function: %s", path);
-            dlclose(lib);
+            PluginClose(lib);
             return;
         }
 
         if (!RegisterPlugin(plugin_register(), lib)) {
             SCLogError("Plugin registration failed: %s", path);
-            dlclose(lib);
+            PluginClose(lib);
             return;
         }
     }
@@ -116,7 +157,12 @@ static void LoadPluginsFromPath(const char *plugin_path)
         struct dirent *entry = NULL;
         char path[PATH_MAX];
         while ((entry = readdir(dir)) != NULL) {
+#ifdef OS_WIN32
+            const char *extension = strrchr(entry->d_name, '.');
+            if (extension != NULL && strcasecmp(extension, ".dll") == 0) {
+#else
             if (strstr(entry->d_name, ".so") != NULL) {
+#endif
                 snprintf(path, sizeof(path), "%s/%s", plugin_path, entry->d_name);
                 InitPlugin(path);
             }

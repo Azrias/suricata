@@ -49,7 +49,7 @@ static ThreadVars *g_worker_tvs[MAX_INTERFACES];
  */
 struct WorkerArgs {
     ThreadVars *tv;
-    char *interface;
+    char *interface_name;
     char *device_name;
 };
 
@@ -94,7 +94,7 @@ static void *SimpleWorker(void *arg)
 
     /* Open live capture on interface. */
     char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t *fp = pcap_open_live(args->interface, 65535, 1, 1000, errbuf);
+    pcap_t *fp = pcap_open_live(args->interface_name, 65535, 1, 1000, errbuf);
     if (fp == NULL) {
         SCLogError("Failed to open interface: %s", errbuf);
         exit_code = EXIT_FAILURE;
@@ -121,12 +121,12 @@ static void *SimpleWorker(void *arg)
             continue;
         } else if (pcap_rc == -1) {
             /* Error occurred */
-            SCLogError("pcap_next_ex failed on %s: %s", args->interface, pcap_geterr(fp));
+            SCLogError("pcap_next_ex failed on %s: %s", args->interface_name, pcap_geterr(fp));
             exit_code = EXIT_FAILURE;
             goto done;
         } else if (pcap_rc == -2) {
             /* End of file (shouldn't happen in live capture) */
-            SCLogNotice("End of capture on %s", args->interface);
+            SCLogNotice("End of capture on %s", args->interface_name);
             exit_code = EXIT_FAILURE;
             goto done;
         }
@@ -149,14 +149,14 @@ static void *SimpleWorker(void *arg)
         if (PacketSetData(p, packet, pkthdr->len) == -1) {
             TmqhOutputPacketpool(tv, p);
             /* Bad packet or setup error; log and continue */
-            SCLogDebug("PacketSetData failed on %s", args->interface);
+            SCLogDebug("PacketSetData failed on %s", args->interface_name);
             continue;
         }
 
         if (TmThreadsSlotProcessPkt(tv, tv->tm_slots, p) != TM_ECODE_OK) {
             TmqhOutputPacketpool(tv, p);
             /* Processing failure for this packet; continue capture */
-            SCLogDebug("TmThreadsSlotProcessPkt failed on %s", args->interface);
+            SCLogDebug("TmThreadsSlotProcessPkt failed on %s", args->interface_name);
             continue;
         }
 
@@ -320,7 +320,7 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < g_interface_count; i++) {
         worker_args[i].tv = g_worker_tvs[i];
-        worker_args[i].interface = g_interfaces[i];
+        worker_args[i].interface_name = g_interfaces[i];
         worker_args[i].device_name = g_interfaces[i];
 
         if (pthread_create(&workers[i], NULL, SimpleWorker, &worker_args[i]) != 0) {
